@@ -125,9 +125,6 @@
     <Compile Include="..\Shared\Models\ConnectionInfo.cs">
       <Link>Models\ConnectionInfo.cs</Link>
     </Compile>
-    <Compile Include="..\Shared\Models\DeviceInitParams.cs">
-      <Link>Models\DeviceInitParams.cs</Link>
-    </Compile>
     <Compile Include="..\Shared\Models\DeviceSetupOptions.cs">
       <Link>Models\DeviceSetupOptions.cs</Link>
     </Compile>
@@ -203,7 +200,7 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>if $(ConfigurationName) == Debug (
-    xcopy "$(TargetPath)" "$(SolutionDir)Server\wwwroot\Downloads\" /y /e /i
+    xcopy "$(TargetPath)" "$(SolutionDir)Server\wwwroot\Content\" /y /e /i
 )</PostBuildEvent>
   </PropertyGroup>
 </Project>

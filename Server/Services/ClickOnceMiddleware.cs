@@ -15,7 +15,7 @@ namespace Remotely.Server.Services
 {
     public class ClickOnceMiddleware
     {
-        public static SemaphoreSlim AppFileLock { get; } = new SemaphoreSlim(1,1);
+        public static SemaphoreSlim AppFileLock { get; } = new(1,1);
 
         private readonly RequestDelegate _next;
 
@@ -27,27 +27,26 @@ namespace Remotely.Server.Services
         
         public async Task Invoke(HttpContext context, IWebHostEnvironment env, IDataService dataService, ILogger<ClickOnceMiddleware> logger)
         {
+            string architecture;
+            string appFilePath;
+
+            switch (context.Request.Path.Value)
+            {
+                case "/Content/Win-x64/ClickOnce/Remotely_Desktop.application":
+                    architecture = "x64";
+                    appFilePath = Path.Combine(env.WebRootPath, "Content", "Win-x64", "ClickOnce", "Remotely_Desktop.application");
+                    break;
+                case "/Content/Win-x86/ClickOnce/Remotely_Desktop.application":
+                    architecture = "x86";
+                    appFilePath = Path.Combine(env.WebRootPath, "Content", "Win-x86", "ClickOnce", "Remotely_Desktop.application");
+                    break;
+                default:
+                    await _next(context);
+                    return;
+            }
 
             try
             {
-                string architecture;
-                string appFilePath;
-
-                switch (context.Request.Path.Value)
-                {
-                    case "/Downloads/Win-x64/ClickOnce/Remotely_Desktop.application":
-                        architecture = "x64";
-                        appFilePath = Path.Combine(env.WebRootPath, "Downloads", "Win-x64", "ClickOnce", "Remotely_Desktop.application");
-                        break;
-                    case "/Downloads/Win-x86/ClickOnce/Remotely_Desktop.application":
-                        architecture = "x86";
-                        appFilePath = Path.Combine(env.WebRootPath, "Downloads", "Win-x86", "ClickOnce", "Remotely_Desktop.application");
-                        break;
-                    default:
-                        await _next(context);
-                        return;
-                }
-
                 var orgName = AppConstants.DefaultPublisherName;
                 var productName = AppConstants.DefaultProductName;
                 var orgId = string.Empty;
@@ -81,7 +80,7 @@ namespace Remotely.Server.Services
                 }
 
                 var deploymentProvider = manifest.GetElementsByTagName("deploymentProvider")[0];
-                var codebaseValue = $"{context.Request.Scheme}://{context.Request.Host}/Downloads/Win-{architecture}/ClickOnce/Remotely_Desktop.application";
+                var codebaseValue = $"{context.Request.Scheme}://{context.Request.Host}/Content/Win-{architecture}/ClickOnce/Remotely_Desktop.application";
                 if (!string.IsNullOrWhiteSpace(orgId))
                 {
                     codebaseValue += $"?organizationid={orgId}";

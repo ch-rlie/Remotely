@@ -11,11 +11,17 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Text.Json;
+using System.Threading;
+using System.Diagnostics;
 
 namespace Remotely.Desktop.Core.Services
 {
     public class Viewer : IDisposable
     {
+        private long _bytesSent;
+        private TimeSpan _timeSpentSending = TimeSpan.Zero;
+
         public Viewer(ICasterSocket casterSocket,
             IScreenCapturer screenCapturer,
             IClipboardService clipboardService,
@@ -36,6 +42,7 @@ namespace Remotely.Desktop.Core.Services
         public bool DisconnectRequested { get; set; }
         public EncoderParameters EncoderParams { get; private set; }
         public bool HasControl { get; set; } = true;
+        public bool AutoQuality { get; set; } = true;
         public bool IsConnected => CasterSocket.IsConnected;
 
         public bool IsStalled
@@ -64,13 +71,14 @@ namespace Remotely.Desktop.Core.Services
 
         public string Name { get; set; }
 
-        public double PeakBytesPerSecond { get; set; }
+        public double AverageBytesPerSecond { get; set; }
         public ConcurrentQueue<SentFrame> PendingSentFrames { get; } = new();
 
         public WebRtcSession RtcSession { get; set; }
 
         public string ViewerConnectionID { get; set; }
         private IAudioCapturer AudioCapturer { get; }
+
 
         private ICasterSocket CasterSocket { get; }
 
@@ -81,11 +89,7 @@ namespace Remotely.Desktop.Core.Services
         public void Dispose()
         {
             DisconnectRequested = true;
-            Disposer.TryDisposeAll(new IDisposable[]
-            {
-                RtcSession,
-                Capturer
-            });
+            Disposer.TryDisposeAll(RtcSession, Capturer);
             GC.SuppressFinalize(this);
         }
 
@@ -150,7 +154,7 @@ namespace Remotely.Desktop.Core.Services
                 () => CasterSocket.SendDtoToViewer(dto, ViewerConnectionID));
         }
 
-        public async Task SendFile(FileUpload fileUpload, Action<double> progressUpdateCallback)
+        public async Task SendFile(FileUpload fileUpload, CancellationToken cancelToken, Action<double> progressUpdateCallback)
         {
             try
             {
@@ -163,13 +167,18 @@ namespace Remotely.Desktop.Core.Services
                     StartOfFile = true
                 };
 
-                await SendToViewer(() => RtcSession.SendDto(fileDto),
-                    () => CasterSocket.SendDtoToViewer(fileDto, ViewerConnectionID));
+                await SendToViewer(async () => await RtcSession.SendDto(fileDto),
+                    async () => await CasterSocket.SendDtoToViewer(fileDto, ViewerConnectionID));
 
                 using var fs = File.OpenRead(fileUpload.FilePath);
                 using var br = new BinaryReader(fs);
                 while (fs.Position < fs.Length)
                 {
+                    if (cancelToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     fileDto = new FileDto()
                     {
                         Buffer = br.ReadBytes(50_000),
@@ -178,8 +187,8 @@ namespace Remotely.Desktop.Core.Services
                     };
 
                     await SendToViewer(
-                        () => RtcSession.SendDto(fileDto),
-                        () => CasterSocket.SendDtoToViewer(fileDto, ViewerConnectionID));
+                        async () => await RtcSession.SendDto(fileDto),
+                        async () => await CasterSocket.SendDtoToViewer(fileDto, ViewerConnectionID));
 
                     progressUpdateCallback((double)fs.Position / fs.Length);
                 }
@@ -192,8 +201,8 @@ namespace Remotely.Desktop.Core.Services
                     StartOfFile = false
                 };
 
-                await SendToViewer(() => RtcSession.SendDto(fileDto),
-                    () => CasterSocket.SendDtoToViewer(fileDto, ViewerConnectionID));
+                await SendToViewer(async () => await RtcSession.SendDto(fileDto),
+                    async () => await CasterSocket.SendDtoToViewer(fileDto, ViewerConnectionID));
 
                 progressUpdateCallback(1);
             }
@@ -219,10 +228,13 @@ namespace Remotely.Desktop.Core.Services
             var width = screenFrame.Width;
             var height = screenFrame.Height;
 
+            var sw = Stopwatch.StartNew();
+
             for (var i = 0; i < screenFrame.EncodedImageBytes.Length; i += 50_000)
             {
                 var dto = new CaptureFrameDto()
                 {
+                    Id = screenFrame.Id,
                     Left = left,
                     Top = top,
                     Width = width,
@@ -237,6 +249,7 @@ namespace Remotely.Desktop.Core.Services
 
             var endOfFrameDto = new CaptureFrameDto()
             {
+                Id = screenFrame.Id,
                 Left = left,
                 Top = top,
                 Width = width,
@@ -244,8 +257,19 @@ namespace Remotely.Desktop.Core.Services
                 EndOfFrame = true
             };
 
-            await SendToViewer(() => RtcSession.SendDto(endOfFrameDto),
+            await SendToViewer(
+                () => RtcSession.SendDto(endOfFrameDto),
                 () => CasterSocket.SendDtoToViewer(endOfFrameDto, ViewerConnectionID));
+
+            sw.Stop();
+
+            _bytesSent += screenFrame.EncodedImageBytes.Length;
+            _timeSpentSending += sw.Elapsed;
+
+
+            AverageBytesPerSecond = _bytesSent / _timeSpentSending.TotalSeconds;
+
+            Debug.WriteLine($"Mbps: {AverageBytesPerSecond / 1024 / 1024 * 8}");
         }
 
         public async Task SendScreenData(string selectedScreen, string[] displayNames)
@@ -280,7 +304,7 @@ namespace Remotely.Desktop.Core.Services
         {
             TaskHelper.DelayUntil(() =>
                 !PendingSentFrames.TryPeek(out var result) || DateTimeOffset.Now - result.Timestamp < TimeSpan.FromSeconds(1),
-                TimeSpan.MaxValue);
+                TimeSpan.FromSeconds(10));
         }
 
         public void ToggleWebRtcVideo(bool toggleOn)

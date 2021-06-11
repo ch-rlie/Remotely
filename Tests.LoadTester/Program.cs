@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.SignalR.Client;
-using Remotely.Shared.Services;
+using Remotely.Agent.Services;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -10,12 +10,15 @@ namespace Remotely.Tests.LoadTester
     internal class Program
     {
         private static readonly SemaphoreSlim _lock = new(10, 10);
+        private static readonly double _heartbeatMs = TimeSpan.FromMinutes(1).TotalMilliseconds;
         private static int _agentCount;
         private static string _organizationId;
         private static string _serverurl;
+        private static DeviceInformationServiceWin _deviceInfo;
 
         private static void Main(string[] args)
         {
+            _deviceInfo = new DeviceInformationServiceWin();
             ConnectAgents();
 
             Console.Write("Press Enter to exit...");
@@ -74,7 +77,7 @@ namespace Remotely.Tests.LoadTester
                 Console.WriteLine("Connecting device number " + i.ToString());
                 await hubConnection.StartAsync();
 
-                var device = await DeviceInformation.Create(deviceId, _organizationId);
+                var device = await _deviceInfo.CreateDevice(deviceId, _organizationId);
                 device.DeviceName = "TestDevice-" + Guid.NewGuid();
 
                 var result = await hubConnection.InvokeAsync<bool>("DeviceCameOnline", device);
@@ -85,14 +88,19 @@ namespace Remotely.Tests.LoadTester
                     return;
                 }
 
-                var heartbeatTimer = new System.Timers.Timer(TimeSpan.FromMinutes(1).TotalMilliseconds);
-                heartbeatTimer.Elapsed += async (sender, args) =>
+                
+                _ = Task.Run(async () =>
                 {
-                    var currentInfo = await DeviceInformation.Create(device.ID, _organizationId);
-                    currentInfo.DeviceName = device.DeviceName;
-                    await hubConnection.SendAsync("DeviceHeartbeat", currentInfo);
-                };
-                heartbeatTimer.Start();
+                    await Task.Delay(new Random().Next(1, (int)_heartbeatMs));
+                    var heartbeatTimer = new System.Timers.Timer(_heartbeatMs);
+                    heartbeatTimer.Elapsed += async (sender, args) =>
+                    {
+                        var currentInfo = await _deviceInfo.CreateDevice(device.ID, _organizationId);
+                        currentInfo.DeviceName = device.DeviceName;
+                        await hubConnection.SendAsync("DeviceHeartbeat", currentInfo);
+                    };
+                    heartbeatTimer.Start();
+                });
             }
             catch (Exception ex)
             {

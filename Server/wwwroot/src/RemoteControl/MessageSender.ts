@@ -16,12 +16,13 @@ import {
     FileDto,
     WindowsSessionsDto,
     GenericDto,
-    ToggleWebRtcVideoDto
+    ToggleWebRtcVideoDto,
+    ToggleAutoQualityDto
 } from "./Interfaces/Dtos.js";
-import { CreateGUID, When } from "../Shared/Utilities.js";
+import { CreateGUID, When } from "./Utilities.js";
 import { FileTransferProgress } from "./UI.js";
-import { BaseDtoType } from "../Shared/Enums/BaseDtoType.js";
-import { RemoteControlMode } from "../Shared/Enums/RemoteControlMode.js";
+import { BaseDtoType } from "./Enums/BaseDtoType.js";
+import { RemoteControlMode } from "./Enums/RemoteControlMode.js";
 
 export class MessageSender {
     GetWindowsSessions() {
@@ -125,6 +126,12 @@ export class MessageSender {
 
         dto = new FileDto(null, fileName, messageId, true, false);
 
+        this.SendToAgent(() => ViewerApp.RtcSession.SendDto(dto),
+            () => ViewerApp.ViewerHubConnection.SendDtoToClient(dto));
+    }
+
+    SendToggleAutoQuality(toggleOn: boolean) {
+        var dto = new ToggleAutoQualityDto(toggleOn);
         this.SendToAgent(() => ViewerApp.RtcSession.SendDto(dto),
             () => ViewerApp.ViewerHubConnection.SendDtoToClient(dto));
     }

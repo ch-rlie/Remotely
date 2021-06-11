@@ -4,6 +4,7 @@ using Remotely.Agent.Interfaces;
 using Remotely.Agent.Services;
 using Remotely.Shared.Enums;
 using Remotely.Shared.Utilities;
+using Remotely.Shared.Services;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -47,28 +48,31 @@ namespace Remotely.Agent
             });
             serviceCollection.AddSingleton<AgentSocket>();
             serviceCollection.AddScoped<ChatClientService>();
-            serviceCollection.AddTransient<Bash>();
-            serviceCollection.AddTransient<CMD>();
             serviceCollection.AddTransient<PSCore>();
-            serviceCollection.AddTransient<WindowsPS>();
+            serviceCollection.AddTransient<ExternalScriptingShell>();
             serviceCollection.AddScoped<ConfigService>();
             serviceCollection.AddScoped<Uninstaller>();
-            serviceCollection.AddScoped<ScriptRunner>();
-            serviceCollection.AddScoped<CommandExecutor>();
+            serviceCollection.AddScoped<ScriptExecutor>();
+            serviceCollection.AddScoped<IProcessInvoker, ProcessInvoker>();
+            serviceCollection.AddScoped<IWebClientEx, WebClientEx>();
 
             if (EnvironmentHelper.IsWindows)
             {
                 serviceCollection.AddScoped<IAppLauncher, AppLauncherWin>();
                 serviceCollection.AddSingleton<IUpdater, UpdaterWin>();
+                serviceCollection.AddSingleton<IDeviceInformationService, DeviceInformationServiceWin>();
             }
             else if (EnvironmentHelper.IsLinux)
             {
                 serviceCollection.AddScoped<IAppLauncher, AppLauncherLinux>();
                 serviceCollection.AddSingleton<IUpdater, UpdaterLinux>();
+                serviceCollection.AddSingleton<IDeviceInformationService, DeviceInformationServiceLinux>();
             }
             else if (EnvironmentHelper.IsMac)
             {
-                // TODO: Mac.
+                serviceCollection.AddScoped<IAppLauncher, AppLauncherMac>();
+                serviceCollection.AddSingleton<IUpdater, UpdaterMac>();
+                serviceCollection.AddSingleton<IDeviceInformationService, DeviceInformationServiceMac>();
             }
             else
             {

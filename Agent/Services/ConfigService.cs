@@ -57,12 +57,12 @@ namespace Remotely.Agent.Services
                 };
             }
 
-            if (EnvironmentHelper.IsDebug && Debugger.IsAttached)
+            if (Environment.UserInteractive && Debugger.IsAttached)
             {
                 return new ConnectionInfo()
                 {
                     DeviceID = _debugGuid,
-                    Host = "https://localhost:5001",
+                    Host = "http://localhost:5000",
                     OrganizationID = orgID
                 };
             }

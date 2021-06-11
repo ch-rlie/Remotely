@@ -7,6 +7,7 @@ using System;
 using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace Remotely.Desktop.Core.Services
 {
@@ -60,12 +61,7 @@ namespace Remotely.Desktop.Core.Services
             }
             catch { }
             PeerSession.Transceivers.RemoveAll(x => true);
-            Disposer.TryDisposeAll(new IDisposable[]
-            {
-                Transceiver?.LocalVideoTrack,
-                VideoSource,
-                PeerSession
-            });
+            Disposer.TryDisposeAll(Transceiver?.LocalVideoTrack, VideoSource, PeerSession);
             GC.SuppressFinalize(this);
         }
 
@@ -109,7 +105,9 @@ namespace Remotely.Desktop.Core.Services
 
         public Task SendDto<T>(T dto) where T : BaseDto
         {
-            return Task.Run(() => CaptureChannel.SendMessage(MessagePackSerializer.Serialize(dto)));
+            CaptureChannel.SendMessage(MessagePackSerializer.Serialize(dto));
+            TaskHelper.DelayUntil(() => CurrentBuffer < 128_000, TimeSpan.FromSeconds(5));
+            return Task.CompletedTask;
         }
 
         public async Task SetRemoteDescription(string type, string sdp)

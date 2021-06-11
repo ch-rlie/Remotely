@@ -70,18 +70,6 @@ namespace Remotely.Tests
 
         [TestMethod]
         [Ignore("Manual test.")]
-        public async Task EncodingSizeTests()
-        {
-            await Task.Delay(5000);
-            var screen = _capturer.GetNextFrame();
-            var a = ImageUtils.EncodeWithSkia(screen, SkiaSharp.SKEncodedImageFormat.Jpeg, 70);
-            Debug.WriteLine("JPEG Size: " + a.Length.ToString("N0"));
-            var b = ImageUtils.EncodeWithSkia(screen, SkiaSharp.SKEncodedImageFormat.Webp, 70);
-            Debug.WriteLine("WEBP Size: " + b.Length.ToString("N0"));
-        }
-
-        [TestMethod]
-        [Ignore("Manual test.")]
         public void EncodingTests()
         {
             for (var i = 0; i < 2; i++)
@@ -108,8 +96,12 @@ namespace Remotely.Tests
                 var diffSize = 0;
                 using (var tempImage = (Bitmap)frame1.Clone(new Rectangle(diff.X, diff.Y, diff.Width, diff.Height), PixelFormat.Format32bppArgb))
                 {
+                    var resizeW = diff.Width * 60 / 100;
+                    var resizeH = diff.Height * 60 / 100;
+                    using var resized = new Bitmap(tempImage, new Size(resizeW, resizeH));
+
                     using var ms = new MemoryStream();
-                    tempImage.Save(ms, jpegEncoder, encoderParams);
+                    resized.Save(ms, jpegEncoder, encoderParams);
                     diffSize = ms.ToArray().Length;
                 }
                 Debug.WriteLine($"Diff area size: {diffSize}");

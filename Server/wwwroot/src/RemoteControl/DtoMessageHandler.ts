@@ -1,9 +1,9 @@
 ﻿import * as UI from "./UI.js";
-import { BaseDtoType } from "../Shared/Enums/BaseDtoType.js";
+import { BaseDtoType } from "./Enums/BaseDtoType.js";
 import { BaseDto } from "./Interfaces/BaseDto.js";
 import { ViewerApp } from "./App.js";
-import { ShowMessage } from "../Shared/UI.js";
-import { Sound } from "../Shared/Sound.js";
+import { ShowMessage } from "./UI.js";
+import { Sound } from "./Sound.js";
 import {
     AudioSampleDto,
     CaptureFrameDto,
@@ -19,7 +19,7 @@ import { ReceiveFile } from "./FileTransferService.js";
 
 export class DtoMessageHandler {
     MessagePack: any = window['MessagePack'];
-    ImagePartials: Array<Uint8Array> = [];
+    ImagePartials: Record<string, Array<Uint8Array>> = {};
 
     ParseBinaryMessage(data: ArrayBuffer) {
         var model = this.MessagePack.decode(data) as BaseDto;
@@ -58,13 +58,14 @@ export class DtoMessageHandler {
     HandleAudioSample(audioSample: AudioSampleDto) {
         Sound.Play(audioSample.Buffer);
     }
-    
+
     HandleCaptureFrame(captureFrame: CaptureFrameDto) {
 
         if (captureFrame.EndOfFrame) {
-            let completedFrame = new Blob(this.ImagePartials);
 
-            this.ImagePartials = [];
+            var partials = this.ImagePartials[captureFrame.Id];
+            let completedFrame = new Blob(partials);
+            this.ImagePartials[captureFrame.Id] = [];
 
             let url = window.URL.createObjectURL(completedFrame);
             let img = new Image(captureFrame.Width, captureFrame.Height);
@@ -91,7 +92,10 @@ export class DtoMessageHandler {
             ViewerApp.MessageSender.SendFrameReceived();
         }
         else {
-            this.ImagePartials.push(captureFrame.ImageBytes);
+            if (!this.ImagePartials[captureFrame.Id]) {
+                this.ImagePartials[captureFrame.Id] = [];
+            }
+            this.ImagePartials[captureFrame.Id].push(captureFrame.ImageBytes);
         }
     }
 
@@ -110,6 +114,7 @@ export class DtoMessageHandler {
     }
     HandleScreenData(screenDataDto: ScreenDataDto) {
         UI.UpdateDisplays(screenDataDto.SelectedScreen, screenDataDto.DisplayNames);
+        ViewerApp.MessageSender.SendToggleAutoQuality(ViewerApp.Settings.autoQuality);
     }
 
     HandleScreenSize(screenSizeDto: ScreenSizeDto) {
