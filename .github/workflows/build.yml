@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       serverUrl:
-        description: 'https://remotely.rlie.ca'     
+        description: 'https://connect.rlie.ca'     
         required: true
       rid:
         description: 'Server Runtime Identifier'     
